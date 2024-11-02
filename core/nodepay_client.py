@@ -1,6 +1,9 @@
 import time
 import uuid
 import warnings
+import os
+import json
+
 from random_username.generate import generate_username
 from tenacity import retry, stop_after_attempt, retry_if_not_exception_type
 
@@ -19,6 +22,7 @@ class NodePayClient(BaseClient):
         self.user_agent = user_agent
         self.proxy = proxy
         self.browser_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, self.proxy or ""))
+        self.token_json_db = 'data/tokens_db.json'
 
     async def __aenter__(self):
         await self.create_session(self.proxy, self.user_agent)
@@ -74,11 +78,48 @@ class NodePayClient(BaseClient):
             json_data=json_data
         )
 
+    async def _load_token(self, email: str):
+        if not os.path.exists(self.token_json_db):
+            with open(self.token_json_db, mode='w') as f:
+                f.write(json.dumps({}))
+            return False
+
+        with open(self.token_json_db, mode='r') as f:
+            content = f.read()
+            credentials = json.loads(content)
+            account_info = credentials.get(email)
+            if not account_info:
+                return False
+            return account_info.get('uid'), account_info.get('token')
+
+    async def _save_token(self, email: str, uid: str, token: str):
+        credentials = {}
+        credentials[email] = {
+            'uid': uid,
+            'token': token
+        }
+        with open(self.token_json_db, mode='w') as f:
+            f.write(json.dumps(credentials))
+
     @retry(
         stop=stop_after_attempt(5),
         retry=retry_if_not_exception_type(LoginError)
     )
     async def login(self, captcha_service):
+        # Check if token exists and is valid
+        account_info = await self._load_token(self.email)
+        if account_info:
+            uid, token = account_info
+            # Verify token validity
+            try:
+                await self.info(token)
+                # print(f'{self.email} | Token is valid')
+                return uid, token
+            except Exception:
+                # print(f'{self.email} | Token is invalid, proceed to get a new one')
+                pass
+
+        # Obtain a new token
         captcha_token = await captcha_service.get_captcha_token_async()
         headers = self._auth_headers()
 
@@ -98,12 +139,15 @@ class NodePayClient(BaseClient):
 
         if not response.get("success"):
             msg = response.get("msg")
-            # if response.get("code") == -102:
-            #     raise LoginError(msg)
-
             raise LoginError(msg)
 
-        return response['data']['user_info']['uid'], response['data']['token']
+        uid = response['data']['user_info']['uid']
+        token = response['data']['token']
+
+        # Save the new token
+        await self._save_token(self.email, uid, token)
+
+        return uid, token
 
     async def activate(self, access_token: str):
         json_data = {}
