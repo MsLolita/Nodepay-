@@ -2,9 +2,10 @@ from art import text2art
 from termcolor import colored
 import configparser
 import os
+
+from core.captcha import ServiceCapmonster
 from core.utils.logger import logger
 from core.utils.bot import Bot
-from core.captcha import CaptchaService
 
 class ConsoleMenu:
     def __init__(self, config_file="data/settings.ini"):
@@ -81,7 +82,7 @@ class ConsoleMenu:
             proxy_path=settings['ProxiesFile'],
             threads=int(settings['Threads']),
             ref_codes=ref_codes,
-            captcha_service=CaptchaService(api_key=settings['CaptchaAPIKey']),
+            captcha_service=ServiceCapmonster(api_key=settings['CaptchaAPIKey']),
             delay_range=(float(settings['DelayMin']), float(settings['DelayMax']))
         )
 

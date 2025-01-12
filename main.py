@@ -28,6 +28,6 @@ if __name__ == "__main__":
             from core.menu import ConsoleMenu
             menu = ConsoleMenu()
             asyncio.run(menu.run())
-            
+                
     except KeyboardInterrupt:
         logger.info("Application terminated by user")
