@@ -59,6 +59,16 @@ class BaseClient:
                     proxy=self.proxy,
                     impersonate="chrome110"
                 )
+
+                if response.status_code == 429:
+                    # Обработка ограничения частоты запросов
+                    retry_after = response.headers.get("Retry-After")
+                    retry_after = int(retry_after) if retry_after and retry_after.isdigit() else 5  # 5 секунд по умолчанию
+                    logger.warning(f"Rate limited. Retrying after {retry_after} seconds...")
+                    await asyncio.sleep(retry_after)
+                    retry_count += 1
+                    continue
+                    
                 if response.status_code in [403, 400]:
                     raise CloudflareException('Cloudflare protection detected')
                 
